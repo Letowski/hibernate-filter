@@ -11,7 +11,7 @@ apply plugin: 'idea'
 
 jar {
     baseName = 'hibernate-filter'
-    version =  '0.1.0'
+    version =  '-SNAPSHOT'
 }
 
 repositories {
