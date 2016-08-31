@@ -1,7 +1,8 @@
-package com.letowski.hibernateFilter;
+package com.letowski.hibernate;
 
 import org.hibernate.Criteria;
 import org.hibernate.Session;
+import org.hibernate.criterion.Criterion;
 import org.hibernate.criterion.MatchMode;
 import org.hibernate.criterion.Order;
 import org.hibernate.criterion.Restrictions;
@@ -16,7 +17,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
-
+//voodoo people
 public class TableFilter {
     private static final DateFormat dateformat = new SimpleDateFormat("yyyy-MM-dd");
     private Map<String, String> eq = new HashMap<String, String>();
@@ -27,6 +28,7 @@ public class TableFilter {
     private Map<String, String> like = new HashMap<String, String>();
     private Map<String, Boolean> order = new HashMap<String, Boolean>();
     private Map<String, List<String>> in = new HashMap<String, List<String>>();
+    private Map<String, Boolean> nullable = new HashMap<String, Boolean>();
     private int offset = 0;
     private int limit = 20;
     private Criteria criteria;
@@ -107,6 +109,7 @@ public class TableFilter {
         this.createAlias(in);
         this.createAlias(ge);
         this.createAlias(le);
+        this.createAlias(nullable);
         this.criteria.setFirstResult(offset);
         this.criteria.setMaxResults(limit);
 
@@ -117,14 +120,18 @@ public class TableFilter {
         this.addRestrictionsIn(this.in);
         this.addRestrictionsGe(this.ge);
         this.addRestrictionsLe(this.le);
+        this.addRestrictionsNullable(this.nullable);
 
         this.addOrder(this.order);
+        this.criteria.setResultTransformer(Criteria.DISTINCT_ROOT_ENTITY);
     }
 
     public List run(Class table, Session session) throws Exception {
         this.createCriteria(table,session);
         this.prepare();
-        return this.criteria.list();
+        List list=this.criteria.list();
+        session.close();
+        return list;
     }
 
     public Criteria manual(Class table, Session session, Criteria criteria) throws Exception{
@@ -146,7 +153,14 @@ public class TableFilter {
 
     private void addOrder(Map<String, Boolean> map) {
         for (Map.Entry<String, Boolean> entry : map.entrySet()) {
-            this.criteria.addOrder(entry.getValue() ? Order.asc(entry.getKey()) : Order.desc(entry.getKey()));
+            String key=entry.getKey();
+            if(key.contains(".")){
+                String[] pieces = key.split("\\.");
+                if(pieces.length>2){
+                    key = pieces[pieces.length-2] + "." + pieces[pieces.length-1];
+                }
+            }
+            this.criteria.addOrder(entry.getValue() ? Order.asc(key) : Order.desc(key));
         }
     }
 
@@ -159,24 +173,47 @@ public class TableFilter {
     private void addRestrictionsLike(Map<String, String> map) {
         for (Map.Entry<String, String> entry : map.entrySet()) {
             if (!entry.getValue().equals("")) {
-                switch (this.returnType(this.table, entry.getKey())) {
-                    case "Long": {
-                        try {
-                            this.criteria.add(Restrictions.sqlRestriction("{" + this.entityName(entry.getKey()) + "}"
-                                    + "." + this.columnName(this.table, entry.getKey()) + " LIKE '%" + entry.getValue
-                                    () + "%'"));
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                        break;
+                if(!entry.getKey().contains(",")) {
+                    Criterion criterion = this.restrictionLike(entry.getKey(), entry.getValue());
+                    if(criterion!=null){
+                        this.criteria.add(criterion);
                     }
-                    case "String": {
-                        this.criteria.add(Restrictions.like(entry.getKey(), entry.getValue(), MatchMode.ANYWHERE));
-                        break;
+                }else{
+                    String[] pieces = entry.getKey().split(",");
+                    List<Criterion> criterionList = new ArrayList<>();
+                    for(String piece : pieces){
+                        if(!piece.equals("")){
+                            Criterion criterion = this.restrictionLike(piece, entry.getValue());
+                            if(criterion!=null){
+                                criterionList.add(criterion);
+                            }
+                        }
+                    }
+                    if(criterionList.size()>0){
+                        Criterion[] criterions = new Criterion[criterionList.size()];
+                        this.criteria.add(Restrictions.or(criterionList.toArray(criterions)));
                     }
                 }
             }
         }
+    }
+
+    private Criterion restrictionLike(String key, String value) {
+        switch (this.returnType(this.table, key)) {
+            case "Long": {
+                try {
+                    return Restrictions.sqlRestriction("{" + this.entityName(key) + "}"
+                            + "." + this.columnName(this.table, key) + " LIKE '%" + value + "%'");
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    return null;
+                }
+            }
+            case "String": {
+                return Restrictions.like(key, value, MatchMode.ANYWHERE).ignoreCase();
+            }
+        }
+        return null;
     }
 
     private void addRestrictionsEq(Map<String, String> map) {
@@ -191,6 +228,17 @@ public class TableFilter {
                         this.criteria.add(Restrictions.eq(entry.getKey(), entry.getValue()));
                         break;
                     }
+                }
+            }
+        }
+    }
+    private void addRestrictionsNullable(Map<String, Boolean> map) {
+        for (Map.Entry<String, Boolean> entry : map.entrySet()) {
+            if (!entry.getKey().equals("")) {
+                if(entry.getValue()) {
+                    this.criteria.add(Restrictions.isNull(entry.getKey()));
+                }else {
+                    this.criteria.add(Restrictions.isNotNull(entry.getKey()));
                 }
             }
         }
@@ -258,6 +306,7 @@ public class TableFilter {
                         try {
                             Timestamp timestamp = new Timestamp(dateformat.parse(entry.getValue()).getTime());
                             if (isLe) {
+                                timestamp.setTime(timestamp.getTime()+24*60*60*1000);
                                 this.criteria.add(Restrictions.le(entry.getKey(), timestamp));
                             } else {
                                 this.criteria.add(Restrictions.ge(entry.getKey(), timestamp));
@@ -313,13 +362,36 @@ public class TableFilter {
     }
 
     private void createAlias(Map<String, ?> map) {
-        String tableName;
         for (Map.Entry<String, ?> entry : map.entrySet()) {
-            if (entry.getKey().contains(".")) {
-                String[] pieces = entry.getKey().split("\\.");
-                tableName = pieces[pieces.length - 2];
+            if(!entry.getKey().contains(",")) {
+                this.createAlias(entry.getKey());
+            }else{
+                String[] pieces = entry.getKey().split(",");
+                for (String piece : pieces){
+                    if(!piece.equals("")){
+                        this.createAlias(piece);
+                    }
+                }
+            }
+        }
+    }
+
+    private static String joinPartOfArray(String[] pieces, int position, String separator){
+        String result="";
+        for(int i = 0; i <= position; i++) {
+            result = (result.equals("")) ? pieces[i] : result+separator+pieces[i];
+        }
+        return result;
+    }
+
+    private void createAlias(String string){
+        if (string.contains(".")) {
+            String[] pieces = string.split("\\.");
+            for(int i = 0; i < pieces.length-1; i++) {
+                String tableName = joinPartOfArray(pieces,i,".");
+                String tableNameStripped = pieces[i];
                 if (!this.aliases.contains(tableName)) {
-                    this.criteria.createAlias(tableName, tableName);
+                    this.criteria.createAlias(tableName, tableNameStripped);
                     this.aliases.add(tableName);
                 }
             }
@@ -419,5 +491,13 @@ public class TableFilter {
 
     public void setLe(Map<String, String> le) {
         this.le = le;
+    }
+
+    public Map<String, Boolean> getNullable() {
+        return nullable;
+    }
+
+    public void setNullable(Map<String, Boolean> nullable) {
+        this.nullable = nullable;
     }
 }
