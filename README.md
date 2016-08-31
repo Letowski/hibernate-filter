@@ -17,6 +17,8 @@
 ##Example
 ###GET action
 ```java
+import com.letowski.hibernate.TableFilter;
+...
 @RequestMapping(value = "/users", method = RequestMethod.GET)
 public ResponseEntity operators(@ModelAttribute TableFilter tableFilter) throws Exception
 {
@@ -25,6 +27,8 @@ public ResponseEntity operators(@ModelAttribute TableFilter tableFilter) throws 
 ```
 ###POST action (and other methods)
 ```java
+import com.letowski.hibernate.TableFilter;
+...
 @RequestMapping(value = "/users", method = RequestMethod.POST)
 public ResponseEntity operators(@RequestBody TableFilter tableFilter) throws Exception
 {
