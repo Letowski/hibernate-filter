@@ -3,6 +3,17 @@
     by passing parameters through REST interface.
     It help to create JS SPA without parameters mapping on server's side.
 
+##Install
+    Add to your build.gradle file thouse lines:
+
+    repositories {
+        ...
+        maven { url "https://jitpack.io" }
+    }
+    dependencies {
+        ...
+        compile("com.github.Letowski:hibernate-filter:+")
+    }
 ##Example
 ###GET action
 ```java
