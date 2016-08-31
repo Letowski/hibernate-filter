@@ -1,7 +1,7 @@
 #Hibernate Table Filter
     Provides simple selecting rows from hibernate table
     by passing parameters through REST interface.
-    It helps create JS SPA without parameters mapping on server's side.
+    It help to create JS SPA without parameters mapping on server's side.
 
 ##Example
 ###GET action
