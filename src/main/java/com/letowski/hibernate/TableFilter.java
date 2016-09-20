@@ -6,10 +6,18 @@ import org.hibernate.criterion.Criterion;
 import org.hibernate.criterion.MatchMode;
 import org.hibernate.criterion.Order;
 import org.hibernate.criterion.Restrictions;
+import org.hibernate.engine.spi.LoadQueryInfluencers;
+import org.hibernate.engine.spi.SessionFactoryImplementor;
+import org.hibernate.internal.CriteriaImpl;
+import org.hibernate.internal.SessionImpl;
+import org.hibernate.loader.OuterJoinLoader;
+import org.hibernate.loader.criteria.CriteriaLoader;
+import org.hibernate.persister.entity.OuterJoinLoadable;
 
 import javax.persistence.Column;
 import javax.persistence.Table;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.sql.Timestamp;
 import java.text.DateFormat;
@@ -19,22 +27,44 @@ import java.util.*;
 
 //voodoo people
 public class TableFilter {
-    private static final DateFormat dateformat = new SimpleDateFormat("yyyy-MM-dd");
-    private Map<String, String> eq = new HashMap<String, String>();
-    private Map<String, String> gt = new HashMap<String, String>();
-    private Map<String, String> lt = new HashMap<String, String>();
-    private Map<String, String> ge = new HashMap<String, String>();
-    private Map<String, String> le = new HashMap<String, String>();
-    private Map<String, String> like = new HashMap<String, String>();
-    private Map<String, Boolean> order = new HashMap<String, Boolean>();
-    private Map<String, List<String>> in = new HashMap<String, List<String>>();
-    private Map<String, Boolean> nullable = new HashMap<String, Boolean>();
-    private int offset = 0;
-    private int limit = 20;
-    private Criteria criteria;
-    private Session session;
-    private Class table;
-    private Set<String> aliases = new HashSet<>();
+    protected static final DateFormat dateformat = new SimpleDateFormat("yyyy-MM-dd");
+    protected Map<String, String> eq = new HashMap<String, String>();
+    protected Map<String, String> gt = new HashMap<String, String>();
+    protected Map<String, String> lt = new HashMap<String, String>();
+    protected Map<String, String> ge = new HashMap<String, String>();
+    protected Map<String, String> le = new HashMap<String, String>();
+    protected Map<String, String> like = new HashMap<String, String>();
+    protected Map<String, Boolean> order = new HashMap<String, Boolean>();
+    protected Map<String, List<String>> in = new HashMap<String, List<String>>();
+    protected Map<String, Boolean> nullable = new HashMap<String, Boolean>();
+    protected int offset = 0;
+    protected int limit = 20;
+    protected Criteria criteria;
+    protected Session session;
+    protected Class table;
+    protected Set<String> aliases = new HashSet<>();
+
+
+    protected static String showSql(Criteria criteria){
+        try {
+            CriteriaImpl c = (CriteriaImpl) criteria;
+            SessionImpl s = (SessionImpl) c.getSession();
+            SessionFactoryImplementor factory = (SessionFactoryImplementor) s.getSessionFactory();
+            String[] implementors = factory.getImplementors(c.getEntityOrClassName());
+            LoadQueryInfluencers lqis = new LoadQueryInfluencers();
+            CriteriaLoader loader = new CriteriaLoader((OuterJoinLoadable) factory.getEntityPersister(implementors[0]), factory, c, implementors[0], lqis);
+            Field f = OuterJoinLoader.class.getDeclaredField("sql");
+            f.setAccessible(true);
+            return (String) f.get(loader);
+        }catch (Exception e){
+            e.printStackTrace();
+            return "";
+        }
+    }
+
+    public String showSql(){
+        return showSql(this.criteria);
+    }
 
     private static String ucfirst(String string) {
         String s1 = string.substring(0, 1).toUpperCase();
@@ -92,7 +122,7 @@ public class TableFilter {
         }
     }
 
-    private String entityName(String fieldName) {
+    protected String entityName(String fieldName) {
         if (!fieldName.contains(".")) {
             return "alias";
         }
@@ -100,7 +130,7 @@ public class TableFilter {
         return pieces[pieces.length - 2];
     }
 
-    private void prepare() throws Exception {
+    protected void prepare() throws Exception {
         this.createAlias(eq);
         this.createAlias(gt);
         this.createAlias(lt);
@@ -140,18 +170,18 @@ public class TableFilter {
         return this.criteria;
     }
 
-    private void createCriteria(Class table, Session session){
+    protected void createCriteria(Class table, Session session){
         this.session = session;
         this.table = table;
         this.criteria = this.session.createCriteria(this.table);
     }
-    private void createCriteria(Class table, Session session, Criteria criteria){
+    protected void createCriteria(Class table, Session session, Criteria criteria){
         this.session = session;
         this.table = table;
         this.criteria = criteria;
     }
 
-    private void addOrder(Map<String, Boolean> map) {
+    protected void addOrder(Map<String, Boolean> map) {
         for (Map.Entry<String, Boolean> entry : map.entrySet()) {
             String key=entry.getKey();
             if(key.contains(".")){
@@ -170,7 +200,7 @@ public class TableFilter {
      *
      * @param map key-value storage to search by
      */
-    private void addRestrictionsLike(Map<String, String> map) {
+    protected void addRestrictionsLike(Map<String, String> map) {
         for (Map.Entry<String, String> entry : map.entrySet()) {
             if (!entry.getValue().equals("")) {
                 if(!entry.getKey().contains(",")) {
@@ -198,7 +228,7 @@ public class TableFilter {
         }
     }
 
-    private Criterion restrictionLike(String key, String value) {
+    protected Criterion restrictionLike(String key, String value) {
         switch (this.returnType(this.table, key)) {
             case "Long": {
                 try {
@@ -216,7 +246,7 @@ public class TableFilter {
         return null;
     }
 
-    private void addRestrictionsEq(Map<String, String> map) {
+    protected void addRestrictionsEq(Map<String, String> map) {
         for (Map.Entry<String, String> entry : map.entrySet()) {
             if (!entry.getValue().equals("")) {
                 switch (this.returnType(this.table, entry.getKey())) {
@@ -232,7 +262,7 @@ public class TableFilter {
             }
         }
     }
-    private void addRestrictionsNullable(Map<String, Boolean> map) {
+    protected void addRestrictionsNullable(Map<String, Boolean> map) {
         for (Map.Entry<String, Boolean> entry : map.entrySet()) {
             if (!entry.getKey().equals("")) {
                 if(entry.getValue()) {
@@ -244,15 +274,15 @@ public class TableFilter {
         }
     }
 
-    private void addRestrictionsGt(Map<String, String> map) {
+    protected void addRestrictionsGt(Map<String, String> map) {
         this.addRestrictionsLtGt(map, true);
     }
 
-    private void addRestrictionsLt(Map<String, String> map) {
+    protected void addRestrictionsLt(Map<String, String> map) {
         this.addRestrictionsLtGt(map, false);
     }
 
-    private void addRestrictionsLtGt(Map<String, String> map, boolean isLt) {
+    protected void addRestrictionsLtGt(Map<String, String> map, boolean isLt) {
         for (Map.Entry<String, String> entry : map.entrySet()) {
             if (!entry.getValue().equals("")) {
                 switch (this.returnType(this.table, entry.getKey())) {
@@ -282,15 +312,15 @@ public class TableFilter {
         }
     }
 
-    private void addRestrictionsGe(Map<String, String> map) {
+    protected void addRestrictionsGe(Map<String, String> map) {
         this.addRestrictionsLeGe(map, true);
     }
 
-    private void addRestrictionsLe(Map<String, String> map) {
+    protected void addRestrictionsLe(Map<String, String> map) {
         this.addRestrictionsLeGe(map, false);
     }
 
-    private void addRestrictionsLeGe(Map<String, String> map, boolean isLe) {
+    protected void addRestrictionsLeGe(Map<String, String> map, boolean isLe) {
         for (Map.Entry<String, String> entry : map.entrySet()) {
             if (!entry.getValue().equals("")) {
                 switch (this.returnType(this.table, entry.getKey())) {
@@ -321,7 +351,7 @@ public class TableFilter {
         }
     }
 
-    private void addRestrictionsIn(Map<String, List<String>> map) {
+    protected void addRestrictionsIn(Map<String, List<String>> map) {
         for (Map.Entry<String, List<String>> entry : map.entrySet()) {
             List<String> values = entry.getValue();
             values.remove("");
@@ -361,7 +391,7 @@ public class TableFilter {
         }
     }
 
-    private void createAlias(Map<String, ?> map) {
+    protected void createAlias(Map<String, ?> map) {
         for (Map.Entry<String, ?> entry : map.entrySet()) {
             if(!entry.getKey().contains(",")) {
                 this.createAlias(entry.getKey());
@@ -376,7 +406,7 @@ public class TableFilter {
         }
     }
 
-    private static String joinPartOfArray(String[] pieces, int position, String separator){
+    protected static String joinPartOfArray(String[] pieces, int position, String separator){
         String result="";
         for(int i = 0; i <= position; i++) {
             result = (result.equals("")) ? pieces[i] : result+separator+pieces[i];
@@ -384,7 +414,7 @@ public class TableFilter {
         return result;
     }
 
-    private void createAlias(String string){
+    protected void createAlias(String string){
         if (string.contains(".")) {
             String[] pieces = string.split("\\.");
             for(int i = 0; i < pieces.length-1; i++) {
@@ -398,7 +428,7 @@ public class TableFilter {
         }
     }
 
-    private String getClassAnnotationValue(Class classType, Class annotationType, String attributeName) {
+    protected String getClassAnnotationValue(Class classType, Class annotationType, String attributeName) {
         String value = null;
 
         Annotation annotation = classType.getAnnotation(annotationType);
