@@ -66,16 +66,19 @@ public class TableFilter {
         return showSql(this.criteria);
     }
 
-    private static String ucfirst(String string) {
+    protected static String ucfirst(String string) {
+        if(string.substring(1, 1).toUpperCase().equals(string.substring(1, 1))){
+            return string;
+        }
         String s1 = string.substring(0, 1).toUpperCase();
         return s1 + string.substring(1);
     }
 
-    private Method reflectionGetterFlat(Class table, String fieldName) throws NoSuchMethodException {
+    protected Method reflectionGetterFlat(Class table, String fieldName) throws NoSuchMethodException {
         return table.getMethod("get" + ucfirst(fieldName));
     }
 
-    private Class reflectionEntity(Class table, String fieldName) throws NoSuchMethodException {
+    protected Class reflectionEntity(Class table, String fieldName) throws NoSuchMethodException {
         if (!fieldName.contains(".")) {
             return table;
         }
@@ -85,7 +88,7 @@ public class TableFilter {
         return this.reflectionEntity(table, fieldName);
     }
 
-    private Method reflectionGetter(Class table, String fieldName) throws NoSuchMethodException {
+    protected Method reflectionGetter(Class table, String fieldName) throws NoSuchMethodException {
         if (!fieldName.contains(".")) {
             return this.reflectionGetterFlat(table, fieldName);
         }
@@ -95,7 +98,7 @@ public class TableFilter {
         return reflectionGetter(table, fieldName);
     }
 
-    private String returnType(Class table, String fieldName) {
+    protected String returnType(Class table, String fieldName) {
         try {
             return reflectionGetter(table, fieldName).getReturnType().getSimpleName();
         } catch (Exception e) {
@@ -104,7 +107,7 @@ public class TableFilter {
         }
     }
 
-    private String columnName(Class table, String fieldName) {
+    protected String columnName(Class table, String fieldName) {
         try {
             return reflectionGetter(table, fieldName).getAnnotation(Column.class).name();
         } catch (Exception e) {
@@ -113,7 +116,7 @@ public class TableFilter {
         }
     }
 
-    private String tableName(Class table, String fieldName) {
+    protected String tableName(Class table, String fieldName) {
         try {
             return this.getClassAnnotationValue(reflectionEntity(table, fieldName), Table.class, "name");
         } catch (Exception e) {
