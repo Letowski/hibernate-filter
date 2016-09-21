@@ -16,6 +16,10 @@ import org.hibernate.persister.entity.OuterJoinLoadable;
 
 import javax.persistence.Column;
 import javax.persistence.Table;
+import java.beans.BeanInfo;
+import java.beans.IntrospectionException;
+import java.beans.Introspector;
+import java.beans.PropertyDescriptor;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -66,19 +70,14 @@ public class TableFilter {
         return showSql(this.criteria);
     }
 
-    protected static String ucfirst(String string) {
-        if(string.substring(1, 1).toUpperCase().equals(string.substring(1, 1))){
-            return string;
-        }
-        String s1 = string.substring(0, 1).toUpperCase();
-        return s1 + string.substring(1);
+    protected Method reflectionGetterFlat(Class table, String fieldName) throws NoSuchMethodException, IntrospectionException {
+        BeanInfo info = Introspector.getBeanInfo(table);
+        for ( PropertyDescriptor pd : info.getPropertyDescriptors() )
+            if (fieldName.equals(pd.getName())) return pd.getReadMethod();
+        throw new NoSuchMethodException(table+" has no field "+fieldName);
     }
 
-    protected Method reflectionGetterFlat(Class table, String fieldName) throws NoSuchMethodException {
-        return table.getMethod("get" + ucfirst(fieldName));
-    }
-
-    protected Class reflectionEntity(Class table, String fieldName) throws NoSuchMethodException {
+    protected Class reflectionEntity(Class table, String fieldName) throws NoSuchMethodException, IntrospectionException {
         if (!fieldName.contains(".")) {
             return table;
         }
@@ -88,7 +87,7 @@ public class TableFilter {
         return this.reflectionEntity(table, fieldName);
     }
 
-    protected Method reflectionGetter(Class table, String fieldName) throws NoSuchMethodException {
+    protected Method reflectionGetter(Class table, String fieldName) throws NoSuchMethodException, IntrospectionException {
         if (!fieldName.contains(".")) {
             return this.reflectionGetterFlat(table, fieldName);
         }
