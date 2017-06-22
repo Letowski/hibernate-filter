@@ -85,7 +85,7 @@ class RestrictionStrategyImpl implements RestrictionStrategy {
             case "Long": {
                 try {
                     return Restrictions.sqlRestriction("{" + this.reflectionStrategy.entityName(key) + "}"
-                            + "." + this.reflectionStrategy.columnName(this.table, key) + " LIKE '%" + value + "%'");
+                            + "." + this.reflectionStrategy.columnName(this.table, key) + " LIKE '%" + Long.parseLong(value) + "%'");
                 } catch (Exception e) {
                     e.printStackTrace();
                     return null;

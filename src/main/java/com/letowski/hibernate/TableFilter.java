@@ -68,6 +68,16 @@ public class TableFilter {
 
 
     protected void prepare() throws Exception {
+        if(this.getLike()!=null && !this.getLike().isEmpty()) {
+            List<String> emptyKeys = new ArrayList<>();
+            this.getLike().forEach((key,value) -> {
+                if(value==null || value.equals("")){
+                    emptyKeys.add(key);
+                }
+            });
+            emptyKeys.forEach(key -> this.getLike().remove(key));
+        }
+
         this.restrictionStrategy.createAlias(eq);
         this.restrictionStrategy.createAlias(gt);
         this.restrictionStrategy.createAlias(lt);
